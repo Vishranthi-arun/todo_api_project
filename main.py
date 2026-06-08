@@ -1,49 +1,43 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+from typing import List
 
 app = FastAPI()
 
 class Todo(BaseModel):
     id: int
-    title: str
-    description: Optional[str]
-    completed: bool = False
-    created_at: datetime
+    task: str
+    completed: bool
 
-todos = []
+todos_db = []
 
-@app.post("/todos/", response_model=Todo)
+@app.post("/todos/", response_model=Todo, status_code=status.HTTP_201_CREATED)
 def create_todo(todo: Todo):
-    todo_dict = todo.dict()
-    todo_dict["id"] = len(todos) + 1
-    todos.append(todo_dict)
-    return todo_dict
+    todo.id = len(todos_db) + 1
+    todos_db.append(todo)
+    return todo
 
-@app.get("/todos/", response_model=List[Todo])
-def get_todos():
-    return todos
+@app.get("/todos/", response_model=List[Todo], status_code=status.HTTP_200_OK)
+def read_todos():
+    return todos_db
 
-@app.get("/todos/{todo_id}", response_model=Todo)
-def get_todo(todo_id: int):
-    for todo in todos:
-        if todo["id"] == todo_id:
-            return todo
+@app.get("/todos/{todo_id}", response_model=Todo, status_code=status.HTTP_200_OK)
+def read_todo(todo_id: int):
+    todo = next((t for t in todos_db if t.id == todo_id), None)
+    if todo is None:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return todo
+
+@app.put("/todos/{todo_id}", response_model=Todo, status_code=status.HTTP_200_OK)
+def update_todo(todo_id: int, updated_todo: Todo):
+    for idx, todo in enumerate(todos_db):
+        if todo.id == todo_id:
+            todos_db[idx] = updated_todo
+            todos_db[idx].id = todo_id
+            return todos_db[idx]
     raise HTTPException(status_code=404, detail="Todo not found")
 
-@app.put("/todos/{todo_id}", response_model=Todo)
-def update_todo(todo_id: int, todo: Todo):
-    for i, t in enumerate(todos):
-        if t["id"] == todo_id:
-            todos[i] = todo.dict()
-            return todos[i]
-    raise HTTPException(status_code=404, detail="Todo not found")
-
-@app.delete("/todos/{todo_id}", response_model=Todo)
+@app.delete("/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_todo(todo_id: int):
-    for i, t in enumerate(todos):
-        if t["id"] == todo_id:
-            del todos[i]
-            return {"id": todo_id}
-    raise HTTPException(status_code=404, detail="Todo not found")
+    global todos_db
+    todos_db = [t for t in todos_db if t.id != todo_id]
